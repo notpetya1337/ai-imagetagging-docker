@@ -1,0 +1,8 @@
+pymongo
+redis
+google-cloud-vision
+google-cloud-videointelligence
+Pillow
+numpy
+tensorflow
+tensorflow_io

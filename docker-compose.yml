@@ -1,0 +1,39 @@
+version: '3.7'
+
+# Windows doesn't support file-level mounting, so a workaround is necessary for config.ini
+services:
+  client:
+    build:
+        context: ./
+        dockerfile: ./client/Dockerfile
+    depends_on:
+      - redis
+      - server
+    volumes:
+      - ${WORKINGFOLDER}:/working
+      - ./config/:/app/config/
+    networks:
+        - app-network
+  server:
+    image: server
+    build:
+        context: ./
+        dockerfile: ./server/Dockerfile
+    depends_on:
+        - redis
+    volumes:
+      - ${WORKINGFOLDER}:/working
+      - ./config/:/app/config/
+    networks:
+        - app-network
+  redis:
+    image: redis:alpine
+    networks:
+        - app-network
+
+networks:
+    app-network:
+        driver: bridge
+
+# mount config.ini into both containers, find an alternative to file level mounting for Windows
+# mount folders to be processed into both containers based on .env file
