@@ -319,3 +319,4 @@ cython_debug/
 #.idea/
 
 config.ini
+/mongodb/

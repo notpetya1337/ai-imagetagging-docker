@@ -3,6 +3,7 @@ version: '3.7'
 # Windows doesn't support file-level mounting, so a workaround is necessary for config.ini
 services:
   client:
+    container_name: tagging-client
     build:
         context: ./
         dockerfile: ./client/Dockerfile
@@ -11,10 +12,11 @@ services:
       - server
     volumes:
       - ${WORKINGFOLDER}:/working
-      - ./config/:/app/config/
+      #- ./config/:/app/config/
     networks:
         - app-network
   server:
+    container_name: tagging-server
     image: server
     build:
         context: ./
@@ -23,11 +25,19 @@ services:
         - redis
     volumes:
       - ${WORKINGFOLDER}:/working
-      - ./config/:/app/config/
+      #- ./config/:/app/config/
     networks:
         - app-network
   redis:
+    container_name: redis
     image: redis:alpine
+    networks:
+        - app-network
+  mongodb:
+    container_name: mongodb
+    image: mongo
+    volumes:
+      - ./mongodb:/data/db
     networks:
         - app-network
 

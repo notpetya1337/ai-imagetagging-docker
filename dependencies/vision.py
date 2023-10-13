@@ -16,31 +16,16 @@ class Tagging:
             self.tags_backend = 'google-vision'
 
     def get_tags(self, image_binary):
-        if self.tags_backend == 'google-vision':
-            tags = self.google_vision_labels(image_binary=image_binary)
-        elif self.tags_backend == 'aws-rekognition':
-            tags = self.aws_rekognition(image_binary=image_binary)
-        else:
-            raise Exception("tags_backend must be a valid backend.")
+        tags = self.google_vision_labels(image_binary=image_binary)
         return tags
 
     def get_text(self, image_binary):
-        if self.tags_backend == 'google-vision':
-            text = self.google_vision_light_ocr(image_binary=image_binary)
-        elif self.tags_backend == 'aws-rekognition':
-            text = self.aws_rekognition(image_binary=image_binary)
-        else:
-            raise Exception("tags_backend must be a valid backend.")
+        text = self.google_vision_light_ocr(image_binary=image_binary)
         return text
 
     # TODO: this doesn't work yet
     def get_ocr_text(self, image_binary):
-        if self.tags_backend == 'google-vision':
-            ocrtext = self.google_vision_heavy_ocr(image_binary=image_binary)
-        elif self.tags_backend == 'aws-rekognition':
-            ocrtext = self.aws_rekognition(image_binary=image_binary)
-        else:
-            raise Exception("tags_backend must be a valid backend.")
+        ocrtext = self.google_vision_heavy_ocr(image_binary=image_binary)
         return ocrtext
 
     def google_vision_labels(self, image_binary):
@@ -56,12 +41,7 @@ class Tagging:
         return tags
 
     def get_explicit(self, image_binary):
-        if self.tags_backend == 'google-vision':
-            text = self.google_vision_explicit_detection(image_binary=image_binary)
-        elif self.tags_backend == 'aws-rekognition':
-            text = self.aws_rekognition(image_binary=image_binary)
-        else:
-            raise Exception("tags_backend must be a valid backend.")
+        text = self.google_vision_explicit_detection(image_binary=image_binary)
         return text
 
     def google_vision_light_ocr(self, image_binary):
@@ -87,8 +67,7 @@ class Tagging:
         # Performs label detection on the image file
         response = client.document_text_detection(image=image)
         textobject = response.text_annotations
-        returntext = textobject
-        return returntext
+        return textobject
 
     def google_vision_explicit_detection(self, image_binary):
         client = vision.ImageAnnotatorClient()
@@ -101,7 +80,3 @@ class Tagging:
         likelihood_name = ("UNKNOWN", "VERY_UNLIKELY", "UNLIKELY", "POSSIBLE", "LIKELY", "VERY_LIKELY",)
         detectionobject = safe
         return safe
-
-    # noinspection PyMethodMayBeStatic
-    def aws_rekognition(self, image_binary):
-        return True  # TODO add AWS support

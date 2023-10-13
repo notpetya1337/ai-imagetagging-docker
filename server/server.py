@@ -34,6 +34,10 @@ if "deepb" in config.configmodels:
     threshold = config.deepbthreshold
     deepb_tagger = deepb.deepdanbooruModel(threshold, modelpath, tagfile)
 
+if "easyocr" in config.configmodels:
+    import easyocr
+    reader = easyocr.Reader(['en'], gpu=False)
+
 # Initialize variables
 tagging = Tagging(
     config.google_credentials, config.google_project, tags_backend="google-vision"
@@ -95,8 +99,6 @@ def process_image(imagepath, workingcollection, subdiv, is_screenshot, models):
         )
     else:
         # Make sure tagging doesn't run twice
-        deeptest = entry.get("deepbtags")
-        deeplen = len(entry.get("deepbtags"))
         if "deepb" in models and entry.get("deepbtags") is None:
             logger.info("Processing DeepB tags for image %s", imagepath)
             deepbtags = deepb_tagger.classify_image(imagepath)
@@ -111,7 +113,7 @@ def process_image(imagepath, workingcollection, subdiv, is_screenshot, models):
             )
 
         if "vision" in models and entry.get("vision_tags") is None:
-            # TODO: add Mongo checks for Vision because of expense
+            # TODO: always check MongoDB before processing with Vision because of expense
             logger.warning("Not processing vision tags yet")
             # collection.update_one()
         if "deepdetect" in models and entry["deepdetect_tags"] is None:
@@ -121,6 +123,7 @@ def process_image(imagepath, workingcollection, subdiv, is_screenshot, models):
 
 
 def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, models):
+    print("Processing:", im_md5, image_array, is_screenshot, subdiv, models)
     tags, text, safe, deepbtags, explicit_detection = None, None, None, None, None
     if "deepb" in models and "deepb" not in config.configmodels:
         logger.error("Client requested DeepB tags but DeepB is disabled in config")

@@ -11,9 +11,8 @@ COPY client/requirements.txt ./requirements.txt
 RUN pip3 install -r requirements.txt
 
 WORKDIR /app
-# temporarily copy in config.ini
-#COPY config.ini ./config.ini
-COPY client/client.py ./client.py
-COPY dependencies ./dependencies
+COPY config/default-config.ini /app/config/config.ini
+COPY client/client.py /app/client.py
+COPY dependencies /app/dependencies
 
 ENTRYPOINT ["python3", "client.py"]

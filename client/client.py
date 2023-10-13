@@ -45,7 +45,7 @@ videocount_lock = threading.Lock()
 queuedimagecount_lock = threading.Lock()
 queuedvideocount_lock = threading.Lock()
 
-REDIS_CLIENT = Redis(host='localhost', port=6379, db=0)
+REDIS_CLIENT = Redis(host=config.redishost, port=config.redisport, db=0)
 
 logger.info("Loading md5s from MongoDB")
 allmd5s = set([x["md5"] for x in collection.find({}, {"md5": 1, "_id": 0})])
@@ -169,4 +169,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
+        time.sleep(600)
