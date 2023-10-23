@@ -1,4 +1,5 @@
 FROM python:3.10-slim-bullseye
+LABEL org.opencontainers.image.source="https://github.com/notpetya1337/ai-imagetagging-docker/"
 LABEL authors="notpetya1337"
 
 # install dependencies
