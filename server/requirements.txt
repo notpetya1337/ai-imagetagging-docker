@@ -6,6 +6,7 @@ Pillow
 numpy
 tensorflow-cpu
 tensorflow_io
+PyMuPDF
 paddlepaddle
 paddleocr
 pyexiftool
