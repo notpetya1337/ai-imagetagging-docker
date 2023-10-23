@@ -1,8 +1,5 @@
-FROM python:3.11-slim-bullseye
+FROM python:3.10-slim-bullseye
 LABEL authors="notpetya"
-
-## download deepb model for now,
-## cd to /app, copy from dependencies or entire folder, pip install, set entrypoint
 
 # install dependencies  --no-cache
 RUN apt-get update

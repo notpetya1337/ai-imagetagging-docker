@@ -1,10 +1,9 @@
-FROM python:3.11-slim-bullseye
+FROM python:3.10-slim-bullseye
 LABEL authors="notpetya1337"
-## cd to /app, copy from dependencies or entire folder, pip install, set entrypoint
 
 # install dependencies
 RUN apt-get update
-# maybe download ffmpeg and exiftool if I need the newest version
+# maybe download ffmpeg and exiftool from their websites if I need the newest version
 RUN apt-get -qq install ffmpeg exiftool
 
 COPY client/requirements.txt ./requirements.txt
