@@ -34,16 +34,20 @@ services:
     networks:
         - app-network
   mongodb:
+#    user: "$UID:$GID"
     container_name: mongodb
     image: mongo
     volumes:
-      - ./mongodb:/data/db
+      - mongodata:/data/db
     networks:
         - app-network
 
 networks:
     app-network:
         driver: bridge
+
+volumes:
+  mongodata:
 
 # mount config.ini into both containers, find an alternative to file level mounting for Windows
 # mount folders to be processed into both containers based on .env file

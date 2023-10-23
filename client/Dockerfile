@@ -5,7 +5,7 @@ LABEL authors="notpetya1337"
 # install dependencies
 RUN apt-get update
 # maybe download ffmpeg and exiftool if I need the newest version
-RUN apt-get -y install ffmpeg exiftool
+RUN apt-get -qq install ffmpeg exiftool
 
 COPY client/requirements.txt ./requirements.txt
 RUN pip3 install -r requirements.txt

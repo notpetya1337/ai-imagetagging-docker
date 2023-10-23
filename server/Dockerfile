@@ -6,7 +6,7 @@ LABEL authors="notpetya"
 
 # install dependencies  --no-cache
 RUN apt-get update
-RUN apt-get -y install ffmpeg exiftool wget zip
+RUN apt-get -qq install ffmpeg exiftool wget zip
 
 COPY server/requirements.txt ./requirements.txt
 RUN pip3 install -r requirements.txt
@@ -15,7 +15,6 @@ WORKDIR /models
 RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/deepdanbooru-v3-20211112-sgd-e28.zip -O model.zip && unzip model.zip -d ./ && rm model.zip
 #COPY model.zip ./model.zip
 #RUN unzip model.zip -d ./ && rm model.zip
-# TODO: add step to download easyocr model now instead of at first startup
 
 WORKDIR /app
 COPY config/default-config.ini /app/config/config.ini
