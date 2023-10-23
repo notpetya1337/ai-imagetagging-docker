@@ -22,20 +22,35 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver-opts: network=host
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN }}
       - name: Build and push to local registry
         uses: docker/build-push-action@v5
         with:
           context: .
           file: client/Dockerfile
           push: true
-          tags: localhost:5000/notpetya/imagetagging-client:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/imagetagging-client:${{ github.ref }}
+            ghcr.io/imagetagging-client:latest
       - name: Build and push to local registry
         uses: docker/build-push-action@v5
         with:
           context: .
           file: server/Dockerfile
           push: true
-          tags: localhost:5000/notpetya/imagetagging-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/imagetagging-server:${{ github.ref }}
+            ghcr.io/imagetagging-server:latest
+          
       - name: Inspect
         run: |
-          docker buildx imagetools inspect localhost:5000/notpetya/imagetagging-server:latest  
+          docker buildx imagetools inspect ghcr.io/notpetya1337/imagetagging-server:latest  
