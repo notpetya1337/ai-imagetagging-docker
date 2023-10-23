@@ -32,8 +32,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ghcr.io/imagetagging-client:${{ github.ref }}
-            ghcr.io/imagetagging-client:latest
+            #ghcr.io/${{ github.repository_owner }}/imagetagging-client:${{ github.ref }}
+            ghcr.io/${{ github.repository_owner }}/imagetagging-client:latest
       - name: Build and push to local registry
         uses: docker/build-push-action@v5
         with:
