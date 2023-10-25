@@ -38,13 +38,9 @@ videocollection.create_index("content_md5")
 videocollection.create_index("vision_tags")
 
 # Initialize variables
-imagecount, videocount, queuedimagecount, queuedvideocount, exifcount = 0, 0, 0, 0, 0
-foldercount = 0
-imagecount_lock = threading.Lock()
-videocount_lock = threading.Lock()
-queuedimagecount_lock = threading.Lock()
-queuedvideocount_lock = threading.Lock()
-exifcount_lock = threading.Lock()
+imagecount, videocount, queuedimagecount, queuedvideocount, exifcount, exifvideocount, foldercount = 0, 0, 0, 0, 0, 0, 0
+imagecount_lock, videocount_lock, queuedimagecount_lock, queuedvideocount_lock, exifcount_lock, exifvideocount_lock = (
+    threading.Lock(), threading.Lock(), threading.Lock(), threading.Lock(), threading.Lock(), threading.Lock())
 
 REDIS_CLIENT = Redis(host=config.redishost, port=config.redisport, db=0)
 
@@ -140,7 +136,7 @@ def process_image_folder(workingdir, is_screenshot, subdiv):
 
 def process_video_folder(workingdir, subdiv):
     rootdir = config.getdiv(subdiv)
-    global videocount, videocount_lock, queuedvideocount, queuedvideocount_lock
+    global videocount, videocount_lock, queuedvideocount, queuedvideocount_lock, exifvideocount, exifvideocount_lock
     workingvideos = listvideos(workingdir, config.process_videos)
     # Process only new video loop here
     if config.process_only_new:
@@ -174,6 +170,15 @@ def process_video_folder(workingdir, subdiv):
                 push("queue", json.dumps({"type": 'video', "op": "recognition", "path": videopath, "subdiv": subdiv,
                                           "models": process_models}))
             print(f'Processed {videocount} videos with {queuedvideocount} new', end="\r")
+    print("")
+
+    if config.write_exif:
+        for videopath in workingvideos:
+            with exifvideocount_lock: exifvideocount += 1
+            push("queue", json.dumps({"type": 'video', "op": "write_exif", "path": videopath, "subdiv": subdiv,
+                                      "models": config.configmodels}))
+            print(f"Queued EXIF writing for {exifvideocount} videos ", end="\r")
+    print("")
 
 
 def main():
@@ -185,6 +190,7 @@ def main():
         rootdir = config.getdiv(div)
         allfolders = listdirs(rootdir)
         for _ in allfolders:  # spawn thread per entry here
+            # TODO: this skips the last folder in the list, rewrite this a less hacky way
             workingdir = allfolders.pop(0)
             foldercount += 1
             # TODO: limit number of threads

@@ -43,12 +43,9 @@ if "paddleocr" in config.configmodels:
 et = exiftool.ExifToolHelper(logger=logging.getLogger(__name__).setLevel(logging.INFO), encoding="utf-8", )
 # Initialize variables
 tagging = Tagging(config.google_credentials, config.google_project, tags_backend="google-vision")
-imagecount = 0
-videocount = 0
-foldercount = 0
-# TODO: add a rolling count on the same line with uptime, images, videos, folders
-imagecount_lock = threading.Lock()
-videocount_lock = threading.Lock()
+imagecount, videocount, foldercount = 0, 0, 0
+# TODO: add a rolling count on the same line with uptime, images, videos, folders. Might not be possible with Docker.
+imagecount_lock, videocount_lock = threading.Lock(), threading.Lock()
 # Names of likelihood from google.cloud.vision.enums
 likelihood_name = ("UNKNOWN", "Very unlikely", "Unlikely", "Possible", "Likely", "Very likely",)
 
@@ -127,6 +124,24 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
             collection.update_one({"md5": im_md5}, {"$set": {"paddleocrtext": ocrtext}})
 
 
+def recognize_video(videopath, workingcollection, subdiv, models, rootdir=""):
+    video_content_md5 = str(get_video_content_md5(videopath))
+    # TODO: update to check explicit_detection
+    entry = videocollection.find_one({"content_md5": video_content_md5},
+                                     {"content_md5": 1, "vision_tags": 1, "vision_text": 1, "vision_transcript": 1,
+                                      "explicit_detection": 1})
+    if "vision" in models and entry is None:
+        relpath = os.path.relpath(videopath, rootdir)
+        video_content = get_video_content(videopath)
+        vidpath_array = [videopath]
+        relpath_array = [relpath]
+        mongo_entry = create_videodoc(video_content, video_content_md5, vidpath_array, relpath_array, subdiv)
+        workingcollection.insert_one(mongo_entry)
+        logger.info("Added new entry in MongoDB for video %s \n", videopath)
+    else:
+        logger.info("MongoDB entry for video %s already exists\n", videopath)
+
+
 def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, models):
     """
     Create a properly formatted MongoDB entry for an image that isn't already in the database
@@ -172,6 +187,15 @@ def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, m
     return mongo_entry
 
 
+def create_videodoc(video_content, video_content_md5, vidpath_array, relpath_array, subdiv):
+    videoobj = VideoData(config.google_credentials, config.google_project)
+    videoobj.video_vision_all(video_content)
+    mongo_entry = {"content_md5": video_content_md5, "vision_tags": videoobj.labels, "vision_text": videoobj.text,
+                   "vision_transcript": videoobj.transcripts, "explicit_detection": videoobj.pornography,
+                   "path": vidpath_array, "subdiv": subdiv, "relativepath": relpath_array, }
+    return mongo_entry
+
+
 def mongo_image_data(imagepath, workingcollection, models):
     """
     :param imagepath:
@@ -179,7 +203,7 @@ def mongo_image_data(imagepath, workingcollection, models):
     :param models: str
         models to get tags from, e.g. "vision", "deepb", "explicit"
         only reads from MongoDB
-    :return:
+    :return: list of tags from MongoDB, string of text from MongoDB
     """
     im_md5 = get_image_md5(imagepath)
     tagslist, textlist = [], []
@@ -209,6 +233,34 @@ def mongo_image_data(imagepath, workingcollection, models):
     return tagslist, text
 
 
+def mongo_video_data(videopath, workingcollection, models):
+    """
+    :param videopath: full path to video file
+    :param workingcollection: MongoDB collection to read from
+    :param models: str
+        models to get tags from, e.g. "vision"
+    :return:
+    """
+    tagslist, textlist = [], []
+    video_content_md5 = str(get_video_content_md5(videopath))
+    if "vision" in models:
+        try:
+            explicit_mongo = videocollection.find_one({"content_md5": video_content_md5}, {"explicit_detection": 1, "_id": 0})
+            detobj = explicit_mongo["explicit_detection"]
+        except (KeyError, TypeError):
+            logger.warning("Explicit tags not found for %s", video_content_md5)
+        detobj = []
+        visiontagsjson = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_tags": 1, "_id": 0})))
+        if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        visiontranscript = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_transcript": 1, "_id": 0})))
+        if visiontranscript["vision_transcript"] is not None: textlist.extend(visiontranscript["vision_transcript"])
+        visiontext = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_text": 1, "_id": 0})))
+        if visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
+        text = (" ".join(textlist)).replace("\n", "\\n")
+        text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
+        return tagslist, text
+
+
 def write_image_exif(imagepath, workingcollection, models):
     tags, text = mongo_image_data(imagepath, workingcollection, models)
     if tags and text:
@@ -224,31 +276,18 @@ def write_image_exif(imagepath, workingcollection, models):
             logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
 
 
-def process_video(videopath, workingcollection, subdiv, models, rootdir=""):
-    video_content_md5 = str(get_video_content_md5(videopath))
-    # TODO: update to check explicit_detection
-    entry = videocollection.find_one({"content_md5": video_content_md5},
-                                     {"content_md5": 1, "vision_tags": 1, "vision_text": 1, "vision_transcript": 1,
-                                      "explicit_detection": 1})
-    if "vision" in models and entry is None:
-        relpath = os.path.relpath(videopath, rootdir)
-        video_content = get_video_content(videopath)
-        vidpath_array = [videopath]
-        relpath_array = [relpath]
-        mongo_entry = create_videodoc(video_content, video_content_md5, vidpath_array, relpath_array, subdiv)
-        workingcollection.insert_one(mongo_entry)
-        logger.info("Added new entry in MongoDB for video %s \n", videopath)
-    else:
-        logger.info("MongoDB entry for video %s already exists\n", videopath)
-
-
-def create_videodoc(video_content, video_content_md5, vidpath_array, relpath_array, subdiv):
-    videoobj = VideoData(config.google_credentials, config.google_project)
-    videoobj.video_vision_all(video_content)
-    mongo_entry = {"content_md5": video_content_md5, "vision_tags": videoobj.labels, "vision_text": videoobj.text,
-                   "vision_transcript": videoobj.transcripts, "explicit_detection": videoobj.pornography,
-                   "path": vidpath_array, "subdiv": subdiv, "relativepath": relpath_array, }
-    return mongo_entry
+def write_video_exif(videopath, workingcollection, models):
+    tags, text = mongo_video_data(videopath, workingcollection, models)
+    if tags:
+        try:
+            et.set_tags(videopath, tags={"Subject": tags}, params=["-P", "-overwrite_original"])
+        except exiftool.exceptions.ExifToolExecuteError as e:
+            logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
+    if text:
+        try:
+            et.set_tags(videopath, tags={"Title": text}, params=["-P", "-overwrite_original"])
+        except exiftool.exceptions.ExifToolExecuteError as e:
+            logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
 
 
 while True:
@@ -256,16 +295,19 @@ while True:
     job = json.loads(pull("queue")[1])
     # TODO: use multithreading, work out any possible issues with exiftool
     if job["type"] == "image":
-        print("Processing image, job is", job)
+        logger.info("Processing image, job is", job)
         if job["op"] == "recognition":
             if job["subdiv"] == "screenshot" and job['models'] is not None:
                 recognize_image(job["path"], screenshotcollection, job["subdiv"], job["is_screenshot"], job["models"], )
             elif job['models'] is not None:
                 recognize_image(job["path"], collection, job["subdiv"], job["is_screenshot"], job["models"], )
         if job["op"] == "write_exif":
-            print("Writing EXIF for", job["path"])
+            logger.info("Writing EXIF for %s", job["path"])
             write_image_exif(job["path"], collection, job["models"])
     elif job["type"] == "video":
         if job["op"] == "recognition" and job['models'] is not None:
-            print("Processing video, job is", job)
-            process_video(job["path"], videocollection, job["subdiv"], job["models"])
+            logger.info("Processing video, job is", job)
+            recognize_video(job["path"], videocollection, job["subdiv"], job["models"])
+        if job["op"] == "write_exif":
+            logger.info("Writing EXIF for %s", job["path"])
+            write_video_exif(job["path"], videocollection, job["models"])
