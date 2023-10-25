@@ -58,12 +58,20 @@ for x in videocollection.find({"content_md5": {"$exists": True}}, {"content_md5"
     else:
         videomd5s.add(x["content_md5"])
 # TODO: fix these so entries with `null` aren't added to the set
-deepbmd5s = set(
-    [x["md5"] for x in collection.find({"deepbtags": {"$exists": True, "$type": "array"}}, {"md5": 1, "_id": 0})])
-paddlemd5s = set(
-    [x["md5"] for x in collection.find({"paddleocrtext": {"$exists": True, "$type": "string"}}, {"md5": 1, "_id": 0})])
-visionmd5s = set([x["md5"] for x in collection.find({"vision_tags": {"$exists": True}}, {"md5": 1, "_id": 0})])
-explicitmd5s = set([x["md5"] for x in collection.find({"explicit_detection": {"$exists": True}}, {"md5": 1, "_id": 0})])
+deepbmd5s = set([x["md5"] for x in collection.find({"deepbtags": {"$exists": True, "$type": "array"}},
+                                                   {"md5": 1, "_id": 0})])
+paddlemd5s = set([x["md5"] for x in collection.find({"paddleocrtext": {"$exists": True, "$type": "string"}},
+                                                    {"md5": 1, "_id": 0})])
+visionmd5s = set([x["md5"] for x in collection.find({"$or": [{"vision_tags": {"$ne": None, "$exists": True}},
+                                                             {"vision_text": {"$ne": None, "$exists": True}},
+                                                             {"explicit_detection": {"$ne": None, "$exists": True}}]},
+                                                    {"md5": 1, "_id": 0})])
+visiontagmd5s = set([x["md5"] for x in collection.find({"vision_tags": {"$ne": None, "$exists": True}},
+                                                       {"md5": 1, "_id": 0})])
+visiontextmd5s = set([x["md5"] for x in collection.find({"vision_text": {"$ne": None, "$exists": True}},
+                                                        {"md5": 1, "_id": 0})])
+visionexplicitmd5s = set([x["md5"] for x in collection.find({"explicit_detection": {"$ne": None, "$exists": True}},
+                                                            {"md5": 1, "_id": 0})])
 logger.info("Loaded md5s from MongoDB")
 
 
@@ -104,18 +112,19 @@ def process_image_folder(workingdir, is_screenshot, subdiv):
                 imagecount += 1
             process_models = []
             im_md5 = get_image_md5(imagepath)
-            if "vision" in config.configmodels and im_md5 not in visionmd5s:
-                process_models.append("vision"), visionmd5s.add(im_md5)
-            if "vision" in config.configmodels and im_md5 not in explicitmd5s:
-                process_models.append("explicit"), explicitmd5s.add(im_md5)
+            if "vision" in config.configmodels and im_md5 not in visiontagmd5s:
+                process_models.append("visiontags"), visiontagmd5s.add(im_md5)
+            if "vision" in config.configmodels and im_md5 not in visiontextmd5s:
+                process_models.append("visiontext"), visiontextmd5s.add(im_md5)
+            if "vision" in config.configmodels and im_md5 not in visionexplicitmd5s:
+                process_models.append("explicit"), visionexplicitmd5s.add(im_md5)
             if "paddleocr" in config.configmodels and im_md5 not in paddlemd5s:
                 process_models.append("paddleocr"), paddlemd5s.add(im_md5)
             if subdiv in config.deepbdivs and im_md5 not in deepbmd5s: process_models.append("deepb"), deepbmd5s.add(
                 im_md5)
             if len(process_models) > 0:
-                push("queue", json.dumps(
-                    {"type": 'image', "op": "recognition", "path": imagepath, "is_screenshot": is_screenshot,
-                     "subdiv": subdiv, "models": process_models}))
+                push("queue", json.dumps({"type": 'image', "op": "recognition", "path": imagepath,
+                                          "is_screenshot": is_screenshot, "subdiv": subdiv, "models": process_models}))
                 with queuedimagecount_lock: queuedimagecount += 1
             print(f"Processed {imagecount} images with {queuedimagecount} updated ", end="\r")
     print("")
@@ -154,12 +163,12 @@ def process_video_folder(workingdir, subdiv):
             with videocount_lock:
                 videocount += 1
             vid_md5 = get_video_content_md5(videopath)
-            if "vision" in config.configmodels and vid_md5 not in visionmd5s: process_models.append(
-                "vision"), visionmd5s.add(vid_md5)
-            if "vision" in config.configmodels and vid_md5 not in explicitmd5s: process_models.append(
-                "explicit"), explicitmd5s.add(vid_md5)
-            if subdiv in config.deepbdivs and vid_md5 not in deepbmd5s: process_models.append("deepb"), deepbmd5s.add(
-                vid_md5)
+            if "vision" in config.configmodels and vid_md5 not in visionmd5s: (process_models.append("vision"),
+                                                                               visionmd5s.add(vid_md5))
+            if "vision" in config.configmodels and vid_md5 not in visionexplicitmd5s: process_models.append(
+                "explicit"), visionexplicitmd5s.add(vid_md5)
+            if subdiv in config.deepbdivs and vid_md5 not in deepbmd5s: (process_models.append("deepb"),
+                                                                         deepbmd5s.add(vid_md5))
             if process_models:
                 logger.info("Processing video %s", videopath)
                 push("queue", json.dumps({"type": 'video', "op": "recognition", "path": videopath, "subdiv": subdiv,

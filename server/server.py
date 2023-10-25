@@ -67,7 +67,15 @@ def pull(key):
 
 
 def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models):
-    # TODO: handle update/create in redis instead of checking, support getting explicit tags
+    """
+    Create or update the MongoDB entry for a given image
+    :param imagepath: path to image
+    :param workingcollection: PyMongo collection to write to
+    :param subdiv: subdiv that the image folder is classified as
+    :param is_screenshot: 1 if image is a screenshot, 0 if not
+    :param models: AI models to use for tagging
+    :return:
+    """
     im_md5 = get_image_md5(imagepath)
     image_content = get_image_content(imagepath)
     imagepath_array = [imagepath]
@@ -84,9 +92,29 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
             logger.info("Processing DeepB tags for image %s", imagepath)
             deepbtags = deepb_tagger.classify_image(imagepath)
             collection.update_one({"md5": im_md5}, {"$set": {"deepbtags": deepbtags[1]}})
-        if "vision" in models and entry.get("vision_tags") is None:
-            # TODO: always check MongoDB before processing with Vision because of expense
-            logger.warning("Not processing vision tags yet")  # collection.update_one()
+        if "visiontags" in models and entry.get("vision_tags") is None:
+            # always checking MongoDB before processing with Vision because of expense
+            # Client may create several jobs for the same image, but we're checking Mongo on every run of this function
+            # so this may be excessive
+            if workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})['vision_tags'] is None:
+                logger.info("Processing Vision tags for image %s", imagepath)
+                tags = tagging.get_tags(image_binary=image_content)
+                collection.update_one({"md5": im_md5}, {"$set": {"vision_tags": tags}})
+        if "visiontext" in models and entry.get("vision_text") is None:
+            if workingcollection.find_one({"md5": im_md5}, {"vision_text": 1, "_id": 0})['vision_text'] is None:
+                logger.info("Processing Vision text for image %s", imagepath)
+                text = tagging.get_text(image_binary=image_content)
+                collection.update_one({"md5": im_md5}, {"$set": {"vision_text": text[0]}})
+        if "explicit" in models and entry.get("explicit_detection") is None:
+            if workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})['explicit_detection'] is None:
+                logger.info("Processing Vision explicit detection for image %s", imagepath)
+                safe = tagging.get_explicit(image_binary=image_content)
+                explicit_detection = {"adult": f"{likelihood_name[safe.adult]}",
+                                      "medical": f"{likelihood_name[safe.medical]}",
+                                      "spoofed": f"{likelihood_name[safe.spoof]}",
+                                      "violence": f"{likelihood_name[safe.violence]}",
+                                      "racy": f"{likelihood_name[safe.racy]}", }
+                collection.update_one({"md5": im_md5}, {"$set": {"explicit_detection": explicit_detection}})
         if "paddleocr" in models and entry.get("paddleocrtext") is None:
             logger.info("Processing PaddleOCR text for image %s", imagepath)
             result = ocr.ocr(imagepath, cls=True)
@@ -100,7 +128,17 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
 
 
 def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, models):
-    print("Processing:", im_md5, image_array, is_screenshot, subdiv, models)
+    """
+    Create a properly formatted MongoDB entry for an image that isn't already in the database
+    :param image_content: raw image binary
+    :param im_md5: MD5 of image
+    :param image_array: image path in array format
+    :param is_screenshot: 1 if image is a screenshot, 0 if not
+    :param subdiv: subdiv that the image folder is classified as
+    :param models: AI models to use for tagging
+    :return:
+    """
+    logger.info("Processing:", im_md5, image_array, is_screenshot, subdiv, models)
     tags, text, easytext, ocrtext, safe, deepbtags, explicit_detection = None, None, None, None, None, None, None
     if "deepb" in models and "deepb" not in config.configmodels:
         logger.error("Client requested DeepB tags but DeepB is disabled in config")
@@ -147,13 +185,12 @@ def mongo_image_data(imagepath, workingcollection, models):
     tagslist, textlist = [], []
     if "vision" in models:
         visiontext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_text": 1, "_id": 0})))
-        visiontagsjson = json.loads(
-            json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})))
-        if visiontagsjson is not None: tagslist.extend(visiontagsjson["vision_tags"])
-        if visiontext is not None: textlist.extend(visiontext["vision_text"])
+        visiontagsjson = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})))
+        if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        if visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
     if "deepb" in models:
         deepbtags = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"deepbtags": 1, "_id": 0})))
-        if deepbtags is not None: tagslist.extend(deepbtags["deepbtags"])
+        if deepbtags["deepbtags"] is not None: tagslist.extend(deepbtags["deepbtags"])
     if "explicit" in models:
         explicit_mongo = workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})
         if explicit_mongo:
@@ -165,7 +202,7 @@ def mongo_image_data(imagepath, workingcollection, models):
     text = " ".join(textlist)
     if "paddleocr" in models:
         paddleocrtext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"paddleocrtext": 1, "_id": 0})))
-        if text == "" and paddleocrtext is not None:
+        if text == "" and paddleocrtext["paddleocrtext"] is not None:
             text = paddleocrtext["paddleocrtext"]
     text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
     text = text.replace("\n", " ")
@@ -217,6 +254,7 @@ def create_videodoc(video_content, video_content_md5, vidpath_array, relpath_arr
 while True:
     logger.info("Waiting for job")
     job = json.loads(pull("queue")[1])
+    # TODO: use multithreading, work out any possible issues with exiftool
     if job["type"] == "image":
         print("Processing image, job is", job)
         if job["op"] == "recognition":
@@ -227,7 +265,6 @@ while True:
         if job["op"] == "write_exif":
             print("Writing EXIF for", job["path"])
             write_image_exif(job["path"], collection, job["models"])
-
     elif job["type"] == "video":
         if job["op"] == "recognition" and job['models'] is not None:
             print("Processing video, job is", job)
