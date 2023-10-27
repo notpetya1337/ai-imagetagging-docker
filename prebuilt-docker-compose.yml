@@ -1,0 +1,52 @@
+version: '3.7'
+
+# Windows doesn't support file-level mounting in Docker, so we're mounting a /config folder for compatibility
+services:
+  client:
+    container_name: tagging-client
+    image: ghcr.io/notpetya1337/imagetagging-client:latest
+    depends_on:
+      - redis
+      - server
+    volumes:
+      - ${WORKINGFOLDER}:/working
+      - ${WORKINGARTFOLDER}:/workingart
+      - ./config/:/app/config/
+    networks:
+        - app-network
+  server:
+    container_name: tagging-server
+    image: ghcr.io/notpetya1337/imagetagging-server:latest
+    depends_on:
+        - redis
+    volumes:
+      - ${WORKINGFOLDER}:/working
+      - ${WORKINGARTFOLDER}:/workingart
+      - ./config/:/app/config/
+    networks:
+        - app-network
+  redis:
+    container_name: redis
+    image: redis:alpine
+    networks:
+        - app-network
+  mongodb:
+    container_name: mongodb
+    image: mongo
+    volumes:
+      - mongodata:/data/db
+    networks:
+        - app-network
+    ports:
+      # TODO: do not commit this
+        - "27018:27017"
+
+networks:
+    app-network:
+        driver: bridge
+
+volumes:
+  mongodata:
+
+# mount config.ini into both containers, find an alternative to file level mounting for Windows
+# mount folders to be processed into both containers based on .env file
