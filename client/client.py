@@ -189,8 +189,7 @@ def main():
     for div in config.subdivs:
         rootdir = config.getdiv(div)
         allfolders = listdirs(rootdir)
-        for _ in allfolders:  # spawn thread per entry here
-            # TODO: this skips the last folder in the list, rewrite this a less hacky way
+        while allfolders:
             workingdir = allfolders.pop(0)
             foldercount += 1
             # TODO: limit number of threads

@@ -126,7 +126,6 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
 
 def recognize_video(videopath, workingcollection, subdiv, models, rootdir=""):
     video_content_md5 = str(get_video_content_md5(videopath))
-    # TODO: update to check explicit_detection
     entry = videocollection.find_one({"content_md5": video_content_md5},
                                      {"content_md5": 1, "vision_tags": 1, "vision_text": 1, "vision_transcript": 1,
                                       "explicit_detection": 1})
@@ -138,8 +137,8 @@ def recognize_video(videopath, workingcollection, subdiv, models, rootdir=""):
         mongo_entry = create_videodoc(video_content, video_content_md5, vidpath_array, relpath_array, subdiv)
         workingcollection.insert_one(mongo_entry)
         logger.info("Added new entry in MongoDB for video %s \n", videopath)
-    else:
-        logger.info("MongoDB entry for video %s already exists\n", videopath)
+    elif "vision" in models and entry is not None:
+        logger.info("Not updating video entries yet")
 
 
 def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, models):
@@ -153,7 +152,7 @@ def create_imagedoc(image_content, im_md5, image_array, is_screenshot, subdiv, m
     :param models: AI models to use for tagging
     :return:
     """
-    logger.info("Processing:", im_md5, image_array, is_screenshot, subdiv, models)
+    logger.info("Processing: %s %s %s %s", im_md5, image_array, subdiv, models)
     tags, text, easytext, ocrtext, safe, deepbtags, explicit_detection = None, None, None, None, None, None, None
     if "deepb" in models and "deepb" not in config.configmodels:
         logger.error("Client requested DeepB tags but DeepB is disabled in config")
