@@ -75,6 +75,7 @@ def get_image_md5(image_path):
 
 
 def get_video_content_md5(video_path):
+    # TODO: check that ffmpeg is installed
     try:
         if os.name == "nt":
             process = subprocess.Popen(
