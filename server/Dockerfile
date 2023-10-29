@@ -15,12 +15,12 @@ RUN wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-stati
     && rm ffmpeg-release-amd64-static.tar.xz && mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ffmpeg \
     && mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ffprobe && rm -rf ffmpeg-*-amd64-static
 
-RUN apt-get remove make perl wget zip xz-utils -qq
-
 WORKDIR /models
 RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/deepdanbooru-v3-20211112-sgd-e28.zip -O model.zip && unzip model.zip -d ./ && rm model.zip
 #COPY model.zip ./model.zip
 #RUN unzip model.zip -d ./ && rm model.zip
+
+RUN apt-get remove make perl wget zip xz-utils -qq
 
 WORKDIR /app
 COPY config/default-config.ini /app/config/config.ini
