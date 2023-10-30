@@ -3,10 +3,10 @@ LABEL org.opencontainers.image.source="https://github.com/notpetya1337/ai-imaget
 LABEL authors="notpetya1337"
 
 COPY client/requirements.txt ./requirements.txt
-RUN pip3 install -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # The version of exiftool in the debian repos is too old to support WEBP files
-RUN apt-get update && apt-get install xz-utils make perl wget -qq
+RUN apt-get update && apt-get install --no-install-recommends xz-utils make perl wget -qq
 
 RUN wget -q https://exiftool.org/Image-ExifTool-12.68.tar.gz && tar -xzf Image-ExifTool-12.68.tar.gz \
     && rm Image-ExifTool-12.68.tar.gz && cd Image-ExifTool-12.68 && perl Makefile.PL && make install && cd ..  \
