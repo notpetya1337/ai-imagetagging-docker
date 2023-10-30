@@ -6,10 +6,4 @@ Pillow
 numpy
 tensorflow-cpu
 tensorflow_io
-paddlepaddle
-paddleocr
 pyexiftool
-
--f https://pypi.tuna.tsinghua.edu.cn/simple
--f https://download.pytorch.org/whl/cpu/torch_stable.html
-torch
