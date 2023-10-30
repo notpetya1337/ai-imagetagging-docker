@@ -21,6 +21,8 @@ RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-2021
 #COPY model.zip ./model.zip
 #RUN unzip model.zip -d ./ && rm model.zip
 RUN apt-get remove wget xz-utils -qq
+# run paddleocr once to download models
+RUN paddleocr --use_gpu=False --image_dir https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg --lang en --show_log False && rm tmp.jpg
 
 WORKDIR /app
 COPY config/default-config.ini /app/config/config.ini

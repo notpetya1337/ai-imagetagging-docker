@@ -50,5 +50,4 @@ networks:
 volumes:
   mongodata:
 
-# mount config.ini into both containers, find an alternative to file level mounting for Windows
 # mount folders to be processed into both containers based on .env file
