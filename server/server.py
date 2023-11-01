@@ -209,11 +209,11 @@ def mongo_image_data(imagepath, workingcollection, models):
     if "vision" in models:
         visiontext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_text": 1, "_id": 0})))
         visiontagsjson = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})))
-        if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
-        if visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
+        if visiontagsjson and visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        if visiontext and visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
     if "deepb" in models:
         deepbtags = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"deepbtags": 1, "_id": 0})))
-        if deepbtags["deepbtags"] is not None: tagslist.extend(deepbtags["deepbtags"])
+        if deepbtags and deepbtags["deepbtags"] is not None: tagslist.extend(deepbtags["deepbtags"])
     if "explicit" in models:
         explicit_mongo = workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})
         if explicit_mongo:
@@ -225,7 +225,7 @@ def mongo_image_data(imagepath, workingcollection, models):
     text = " ".join(textlist)
     if "paddleocr" in models:
         paddleocrtext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"paddleocrtext": 1, "_id": 0})))
-        if text == "" and paddleocrtext["paddleocrtext"] is not None:
+        if text == "" and paddleocrtext and paddleocrtext["paddleocrtext"] is not None:
             text = paddleocrtext["paddleocrtext"]
     text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
     text = text.replace("\n", " ")
@@ -250,7 +250,8 @@ def mongo_video_data(videopath, workingcollection, models):
             logger.warning("Explicit tags not found for %s", video_content_md5)
         detobj = []
         visiontagsjson = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_tags": 1, "_id": 0})))
-        if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        if visiontagsjson is not None:
+            if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
         visiontranscript = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_transcript": 1, "_id": 0})))
         if visiontranscript["vision_transcript"] is not None: textlist.extend(visiontranscript["vision_transcript"])
         visiontext = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_text": 1, "_id": 0})))
@@ -258,6 +259,9 @@ def mongo_video_data(videopath, workingcollection, models):
         text = (" ".join(textlist)).replace("\n", "\\n")
         text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
         return tagslist, text
+    else:
+        logger.warning("No models specified for video %s", videopath)
+        return [], []
 
 
 def write_image_exif(imagepath, workingcollection, models):
@@ -294,19 +298,20 @@ while True:
     job = json.loads(pull("queue")[1])
     # TODO: use multithreading, work out any possible issues with exiftool
     if job["type"] == "image":
-        logger.info("Processing image, job is", job)
+        logger.info("Processing image, job is %s", job)
         if job["op"] == "recognition":
             if job["subdiv"] == "screenshot" and job['models'] is not None:
                 recognize_image(job["path"], screenshotcollection, job["subdiv"], job["is_screenshot"], job["models"], )
             elif job['models'] is not None:
                 recognize_image(job["path"], collection, job["subdiv"], job["is_screenshot"], job["models"], )
         if job["op"] == "write_exif":
-            logger.info("Writing EXIF for %s", job["path"])
+            logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
             write_image_exif(job["path"], collection, job["models"])
     elif job["type"] == "video":
         if job["op"] == "recognition" and job['models'] is not None:
-            logger.info("Processing video, job is", job)
+            logger.info("Processing video, job is %s", job)
             recognize_video(job["path"], videocollection, job["subdiv"], job["models"])
-        if job["op"] == "write_exif":
-            logger.info("Writing EXIF for %s", job["path"])
+        # TODO: client.py:178
+        if job["op"] == "write_exif" and "vision" in job['models']:
+            logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
             write_video_exif(job["path"], videocollection, job["models"])

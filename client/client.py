@@ -75,7 +75,7 @@ def push(key, value):
     REDIS_CLIENT.lpush(key, value)
 
 
-def process_image_folder(workingdir, is_screenshot, subdiv):
+def process_image_folder(workingdir, is_screenshot, subdiv, models):
     global imagecount, imagecount_lock, queuedimagecount, queuedimagecount_lock, exifcount, exifcount_lock
     try:
         workingimages = listimages(workingdir, config.process_images)
@@ -129,7 +129,7 @@ def process_image_folder(workingdir, is_screenshot, subdiv):
         for imagepath in workingimages:
             with exifcount_lock: exifcount += 1
             push("queue", json.dumps({"type": 'image', "op": "write_exif", "path": imagepath, "subdiv": subdiv,
-                                      "models": config.configmodels}))
+                                      "models": models}))
             print(f"Queued EXIF writing for {exifcount} images ", end="\r")
     print("")
 
@@ -175,6 +175,7 @@ def process_video_folder(workingdir, subdiv):
     if config.write_exif:
         for videopath in workingvideos:
             with exifvideocount_lock: exifvideocount += 1
+            # TODO: add configvideomodels
             push("queue", json.dumps({"type": 'video', "op": "write_exif", "path": videopath, "subdiv": subdiv,
                                       "models": config.configmodels}))
             print(f"Queued EXIF writing for {exifvideocount} videos ", end="\r")
@@ -198,7 +199,9 @@ def main():
                     is_screenshot = 1
                 else:
                     is_screenshot = 0
-                pool.submit(process_image_folder(workingdir, is_screenshot, div))
+                models = config.configmodels
+                if div in config.deepbdivs and "deepb" in config.configmodels and "deepb" not in models: models.append("deepb")
+                pool.submit(process_image_folder(workingdir, is_screenshot, div, models))
             if config.process_videos:
                 pool.submit(process_video_folder(workingdir, div))
 

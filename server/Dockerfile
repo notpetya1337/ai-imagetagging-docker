@@ -6,9 +6,9 @@ COPY server/requirements.txt server/paddlerequirements.txt ./
 RUN pip3 install --no-cache-dir --no-deps -r paddlerequirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-RUN apt-get update && apt-get install --no-install-recommends make wget unzip xz-utils libgomp1 libgl1 libglib2.0-0 -qq
+RUN apt-get update && apt-get install --no-install-recommends wget unzip xz-utils libgomp1 libgl1 libglib2.0-0 -qq
 
-RUN apt-get install perl -qq && wget -q https://exiftool.org/Image-ExifTool-12.68.tar.gz && tar -xzf Image-ExifTool-12.68.tar.gz \
+RUN apt-get install perl make -qq && wget -q https://exiftool.org/Image-ExifTool-12.68.tar.gz && tar -xzf Image-ExifTool-12.68.tar.gz \
     && rm Image-ExifTool-12.68.tar.gz && cd Image-ExifTool-12.68 && perl Makefile.PL && make install && cd ..  \
     && rm -rf Image-ExifTool-12.68 && apt-get remove perl make -qq
 
@@ -20,7 +20,7 @@ WORKDIR /models
 RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/deepdanbooru-v3-20211112-sgd-e28.zip -O model.zip && unzip model.zip -d ./ && rm model.zip
 #COPY model.zip ./model.zip
 #RUN unzip model.zip -d ./ && rm model.zip
-RUN apt-get remove wget xz-utils -qq
+
 # run paddleocr once to download models
 RUN paddleocr --use_gpu=False --image_dir https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg --lang en --show_log False && rm tmp.jpg
 
