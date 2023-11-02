@@ -103,14 +103,20 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
                 text = tagging.get_text(image_binary=image_content)
                 collection.update_one({"md5": im_md5}, {"$set": {"vision_text": text[0]}})
         if "explicit" in models and entry.get("explicit_detection") is None:
-            if workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})['explicit_detection'] is None:
+            flag = False
+            try:
+                if workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})['explicit_detection'] is None:
+                    flag = True
+            except KeyError:
+                flag = True
+            if flag:
                 logger.info("Processing Vision explicit detection for image %s", imagepath)
                 safe = tagging.get_explicit(image_binary=image_content)
                 explicit_detection = {"adult": f"{likelihood_name[safe.adult]}",
                                       "medical": f"{likelihood_name[safe.medical]}",
                                       "spoofed": f"{likelihood_name[safe.spoof]}",
                                       "violence": f"{likelihood_name[safe.violence]}",
-                                      "racy": f"{likelihood_name[safe.racy]}", }
+                                      "racy": f"{likelihood_name[safe.racy]}" }
                 collection.update_one({"md5": im_md5}, {"$set": {"explicit_detection": explicit_detection}})
         if "paddleocr" in models and entry.get("paddleocrtext") is None:
             logger.info("Processing PaddleOCR text for image %s", imagepath)
