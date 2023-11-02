@@ -37,9 +37,6 @@ services:
       - mongodata:/data/db
     networks:
         - app-network
-    ports:
-      # TODO: do not commit this
-        - "27018:27017"
 
 networks:
     app-network:
