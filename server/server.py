@@ -231,7 +231,7 @@ def mongo_image_data(imagepath, workingcollection, models):
     text = " ".join(textlist)
     if "paddleocr" in models:
         paddleocrtext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"paddleocrtext": 1, "_id": 0})))
-        if text == "" and paddleocrtext and paddleocrtext["paddleocrtext"] is not None:
+        if len(text) == 0 and paddleocrtext and paddleocrtext["paddleocrtext"] is not None:
             text = paddleocrtext["paddleocrtext"]
     text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
     text = text.replace("\n", " ")
@@ -256,13 +256,12 @@ def mongo_video_data(videopath, workingcollection, models):
             logger.warning("Explicit tags not found for %s", video_content_md5)
         detobj = []
         visiontagsjson = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_tags": 1, "_id": 0})))
-        if visiontagsjson is not None:
-            if visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        if visiontagsjson and visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
         visiontranscript = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_transcript": 1, "_id": 0})))
-        if visiontranscript["vision_transcript"] is not None: textlist.extend(visiontranscript["vision_transcript"])
+        if visiontranscript and visiontranscript["vision_transcript"] is not None: textlist.extend(visiontranscript["vision_transcript"])
         visiontext = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_text": 1, "_id": 0})))
-        if visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
-        text = (" ".join(textlist)).replace("\n", "\\n")
+        if visiontext and visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
+        text = (" ".join(textlist)).replace("\n", " ")
         text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
         return tagslist, text
     else:
