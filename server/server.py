@@ -91,8 +91,7 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
             collection.update_one({"md5": im_md5}, {"$set": {"deepbtags": deepbtags[1]}})
         if "visiontags" in models and entry.get("vision_tags") is None:
             # always checking MongoDB before processing with Vision because of expense
-            # Client may create several jobs for the same image, but we're checking Mongo on every run of this function
-            # so this may be excessive
+            # Client may create several jobs for the same image, so we're checking Mongo on every run of this function
             if workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})['vision_tags'] is None:
                 logger.info("Processing Vision tags for image %s", imagepath)
                 tags = tagging.get_tags(image_binary=image_content)
@@ -103,12 +102,11 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
                 text = tagging.get_text(image_binary=image_content)
                 collection.update_one({"md5": im_md5}, {"$set": {"vision_text": text[0]}})
         if "explicit" in models and entry.get("explicit_detection") is None:
-            flag = False
             try:
                 if workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})['explicit_detection'] is None:
                     flag = True
-            except KeyError:
-                flag = True
+            except KeyError: flag = True
+            else: flag = False
             if flag:
                 logger.info("Processing Vision explicit detection for image %s", imagepath)
                 safe = tagging.get_explicit(image_binary=image_content)
@@ -211,12 +209,12 @@ def mongo_image_data(imagepath, workingcollection, models):
     :return: list of tags from MongoDB, string of text from MongoDB
     """
     im_md5 = get_image_md5(imagepath)
-    tagslist, textlist = [], []
+    tagslist, textlist, text = [], [], ""
     if "vision" in models:
         visiontext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_text": 1, "_id": 0})))
-        visiontagsjson = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})))
-        if visiontagsjson and visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
-        if visiontext and visiontext["vision_text"] is not None: textlist.extend(visiontext["vision_text"])
+        visiontags = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"vision_tags": 1, "_id": 0})))
+        if visiontags and visiontags["vision_tags"] is not None: tagslist.extend(visiontags["vision_tags"])
+        if visiontext and visiontext["vision_text"] is not None: textlist = visiontext["vision_text"]
     if "deepb" in models:
         deepbtags = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"deepbtags": 1, "_id": 0})))
         if deepbtags and deepbtags["deepbtags"] is not None: tagslist.extend(deepbtags["deepbtags"])
@@ -228,13 +226,16 @@ def mongo_image_data(imagepath, workingcollection, models):
                 f"Adult: {detobj['adult']}", f"Medical: {detobj['medical']}", f"Spoofed: {detobj['spoofed']}",
                 f"Violence: {detobj['violence']}", f"Racy: {detobj['racy']}")
             tagslist.extend(explicit_results)
-    text = " ".join(textlist)
+    if isinstance(textlist, str):
+        text = " ".join(textlist.splitlines())
+    elif isinstance(textlist, list) and textlist:
+        text = " ".join(textlist[0].splitlines())  # + " "
     if "paddleocr" in models:
         paddleocrtext = json.loads(json.dumps(workingcollection.find_one({"md5": im_md5}, {"paddleocrtext": 1, "_id": 0})))
-        if len(text) == 0 and paddleocrtext and paddleocrtext["paddleocrtext"] is not None:
+        if len(text) == 0 and paddleocrtext and (paddleocrtext["paddleocrtext"] is not None):
             text = paddleocrtext["paddleocrtext"]
     text = (text[:config.maxlength] + " truncated...") if len(text) > config.maxlength else text
-    text = text.replace("\n", " ")
+    logger.info("Text is %s", text)
     return tagslist, text
 
 
