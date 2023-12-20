@@ -77,6 +77,10 @@ def get_image_md5(image_path):
 def get_video_content_md5(video_path):
     # TODO: check that ffmpeg is installed
     try:
+        subprocess.call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL)
+    except FileNotFoundError:
+        raise Exception("ffmpeg not found")
+    try:
         if os.name == "nt":
             process = subprocess.Popen(
                 'cmd /c ffmpeg.exe -i "{vpath}" -map 0:v -f md5 -'.format(

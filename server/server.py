@@ -12,6 +12,7 @@ from dependencies.configops import MainConfig
 from dependencies.fileops import (get_image_content, get_image_md5, get_video_content, get_video_content_md5, )
 from dependencies.vision import Tagging
 from dependencies.vision_video import VideoData
+import concurrent.futures
 
 # read config
 configpath = "/app/config/config.ini"
@@ -39,8 +40,14 @@ if "paddleocr" in config.configmodels:
     import paddleocr
     ocr = paddleocr.PaddleOCR(use_angle_cls=True, lang="en")
 
+if "selfhosted-tags" in config.configmodels:
+    from transformers import pipeline
+    from PIL import Image
+    classifier = pipeline("image-classification", "google/vit-base-patch16-224")
+
+
 # TODO: find out if I need to spawn several of these for multithreading.
-et = exiftool.ExifToolHelper(logger=logging.getLogger(__name__).setLevel(logging.INFO), encoding="utf-8", )
+# et = exiftool.ExifToolHelper(logger=logging.getLogger(__name__).setLevel(logging.INFO), encoding="utf-8")
 # Initialize variables
 tagging = Tagging(config.google_credentials, config.google_project, tags_backend="google-vision")
 imagecount, videocount, foldercount = 0, 0, 0
@@ -105,7 +112,7 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
             try:
                 if workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})['explicit_detection'] is None:
                     flag = True
-            except KeyError: flag = True
+            except KeyError: flag = True  # in case there's no explicit_detection key
             else: flag = False
             if flag:
                 logger.info("Processing Vision explicit detection for image %s", imagepath)
@@ -114,7 +121,7 @@ def recognize_image(imagepath, workingcollection, subdiv, is_screenshot, models)
                                       "medical": f"{likelihood_name[safe.medical]}",
                                       "spoofed": f"{likelihood_name[safe.spoof]}",
                                       "violence": f"{likelihood_name[safe.violence]}",
-                                      "racy": f"{likelihood_name[safe.racy]}" }
+                                      "racy": f"{likelihood_name[safe.racy]}"}
                 collection.update_one({"md5": im_md5}, {"$set": {"explicit_detection": explicit_detection}})
         if "paddleocr" in models and entry.get("paddleocrtext") is None:
             logger.info("Processing PaddleOCR text for image %s", imagepath)
@@ -142,6 +149,7 @@ def recognize_video(videopath, workingcollection, subdiv, models, rootdir=""):
         workingcollection.insert_one(mongo_entry)
         logger.info("Added new entry in MongoDB for video %s \n", videopath)
     elif "vision" in models and entry is not None:
+        # TODO: implement this
         logger.info("Not updating video entries yet")
 
 
@@ -222,9 +230,9 @@ def mongo_image_data(imagepath, workingcollection, models):
         explicit_mongo = workingcollection.find_one({"md5": im_md5}, {"explicit_detection": 1, "_id": 0})
         if explicit_mongo:
             detobj = explicit_mongo["explicit_detection"]
-            explicit_results = (
-                f"Adult: {detobj['adult']}", f"Medical: {detobj['medical']}", f"Spoofed: {detobj['spoofed']}",
-                f"Violence: {detobj['violence']}", f"Racy: {detobj['racy']}")
+            explicit_results = (f"Adult: {detobj['adult']}", f"Medical: {detobj['medical']}",
+                                f"Spoofed: {detobj['spoofed']}", f"Violence: {detobj['violence']}",
+                                f"Racy: {detobj['racy']}")
             tagslist.extend(explicit_results)
     if isinstance(textlist, str):
         text = " ".join(textlist.splitlines())
@@ -250,14 +258,10 @@ def mongo_video_data(videopath, workingcollection, models):
     tagslist, textlist = [], []
     video_content_md5 = str(get_video_content_md5(videopath))
     if "vision" in models:
-        try:
-            explicit_mongo = videocollection.find_one({"content_md5": video_content_md5}, {"explicit_detection": 1, "_id": 0})
-            detobj = explicit_mongo["explicit_detection"]
-        except (KeyError, TypeError):
-            logger.warning("Explicit tags not found for %s", video_content_md5)
-        detobj = []
         visiontagsjson = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_tags": 1, "_id": 0})))
         if visiontagsjson and visiontagsjson["vision_tags"] is not None: tagslist.extend(visiontagsjson["vision_tags"])
+        explicitagsjson = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"explicit_detection": 1, "_id": 0})))
+        if explicitagsjson and explicitagsjson["explicit_detection"] is not None: tagslist.extend(explicitagsjson["explicit_detection"])
         visiontranscript = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_transcript": 1, "_id": 0})))
         if visiontranscript and visiontranscript["vision_transcript"] is not None: textlist.extend(visiontranscript["vision_transcript"])
         visiontext = json.loads(json.dumps(videocollection.find_one({"content_md5": video_content_md5}, {"vision_text": 1, "_id": 0})))
@@ -270,11 +274,16 @@ def mongo_video_data(videopath, workingcollection, models):
         return [], []
 
 
-def write_image_exif(imagepath, workingcollection, models):
-    tags, text = mongo_image_data(imagepath, workingcollection, models)
+def write_image_exif(imagepath, workingcollection, models, et):
+    try:
+        tags, text = mongo_image_data(imagepath, workingcollection, models)
+    except pymongo.errors.ConnectionFailure as e:
+        logger.warning("Error connecting to MongoDB: %s", e)
+        retry
     if tags and text:
         try:
-            # TODO: check back and see if -ec is necessary
+            # TODO: don't commit the logging line
+            logger.warning("Writing text %s to %s", text, imagepath)
             et.set_tags(imagepath, tags={"Subject": tags, "xmp:Title": text}, params=["-P", "-overwrite_original"])
         except exiftool.exceptions.ExifToolExecuteError as e:
             logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
@@ -285,7 +294,8 @@ def write_image_exif(imagepath, workingcollection, models):
             logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
 
 
-def write_video_exif(videopath, workingcollection, models):
+def write_video_exif(videopath, workingcollection, models, et):
+    # TODO: implement retrying
     tags, text = mongo_video_data(videopath, workingcollection, models)
     if tags:
         try:
@@ -299,25 +309,47 @@ def write_video_exif(videopath, workingcollection, models):
             logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
 
 
-while True:
-    logger.info("Waiting for job")
-    job = json.loads(pull("queue")[1])
-    # TODO: use multithreading, work out any possible issues with exiftool
-    if job["type"] == "image":
-        logger.info("Processing image, job is %s", job)
-        if job["op"] == "recognition":
-            if job["subdiv"] == "screenshot" and job['models'] is not None:
-                recognize_image(job["path"], screenshotcollection, job["subdiv"], job["is_screenshot"], job["models"], )
-            elif job['models'] is not None:
-                recognize_image(job["path"], collection, job["subdiv"], job["is_screenshot"], job["models"], )
-        if job["op"] == "write_exif":
-            logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
-            write_image_exif(job["path"], collection, job["models"])
-    elif job["type"] == "video":
-        if job["op"] == "recognition" and job['models'] is not None:
-            logger.info("Processing video, job is %s", job)
-            recognize_video(job["path"], videocollection, job["subdiv"], job["models"])
-        # TODO: client.py:178
-        if job["op"] == "write_exif" and "vision" in job['models']:
-            logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
-            write_video_exif(job["path"], videocollection, job["models"])
+def exifprocessor():
+    while True:
+        et = exiftool.ExifToolHelper(logger=logging.getLogger(__name__).setLevel(logging.INFO), encoding="utf-8")
+        logger.info("Waiting for job")
+        job = json.loads(pull("queue")[1])
+        if job["type"] == "image":
+            logger.info("Processing image, job is %s", job)
+            if job["op"] == "write_exif":
+                logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
+                write_image_exif(job["path"], collection, job["models"], et)
+        elif job["type"] == "video":
+            if job["op"] == "write_exif" and "vision" in job['models']:
+                logger.info("Writing EXIF for %s with models %s", job["path"], job["models"])
+                write_video_exif(job["path"], videocollection, job["models"], et)
+
+
+def recognitionprocessor():
+    while True:
+        logger.info("Waiting for job")
+        job = json.loads(pull("queue")[1])
+        # TODO: use multithreading, work out any possible issues with exiftool
+        if job["type"] == "image":
+            logger.info("Processing image, job is %s", job)
+            if job["op"] == "recognition":
+                if job["subdiv"] == "screenshot" and job['models'] is not None:
+                    recognize_image(job["path"], screenshotcollection, job["subdiv"], job["is_screenshot"], job["models"], )
+                elif job['models'] is not None:
+                    recognize_image(job["path"], collection, job["subdiv"], job["is_screenshot"], job["models"], )
+        elif job["type"] == "video":
+            if job["op"] == "recognition" and job['models'] is not None:
+                logger.info("Processing video, job is %s", job)
+                recognize_video(job["path"], videocollection, job["subdiv"], job["models"])
+            # TODO: client.py:178
+
+
+def main():
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
+        executor.submit(exifprocessor)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
+        executor.submit(recognitionprocessor)
+
+
+if __name__ == '__main__':
+    main()
