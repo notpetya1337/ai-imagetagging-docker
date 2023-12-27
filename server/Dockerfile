@@ -17,9 +17,9 @@ RUN wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-stati
     && mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ffprobe && rm -rf ffmpeg-*-amd64-static
 
 WORKDIR /models
-#RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/deepdanbooru-v3-20211112-sgd-e28.zip -O model.zip && unzip model.zip -d ./ && rm model.zip
-COPY model.zip ./model.zip
-RUN unzip model.zip -d ./ && rm model.zip
+RUN wget -q https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/deepdanbooru-v3-20211112-sgd-e28.zip -O model.zip && unzip model.zip -d ./ && rm model.zip
+#COPY model.zip ./model.zip
+#RUN unzip model.zip -d ./ && rm model.zip
 
 # run paddleocr once to download models
 RUN paddleocr --use_gpu=False --image_dir https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg --lang en --show_log False && rm tmp.jpg
