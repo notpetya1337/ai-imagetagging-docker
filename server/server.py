@@ -279,12 +279,12 @@ def write_image_exif(imagepath, workingcollection, models, et):
         tags, text = mongo_image_data(imagepath, workingcollection, models)
     except pymongo.errors.ConnectionFailure as e:
         logger.warning("Error connecting to MongoDB: %s", e)
-        retry
+        # retry
     if tags and text:
         try:
             # TODO: don't commit the logging line
             logger.warning("Writing text %s to %s", text, imagepath)
-            et.set_tags(imagepath, tags={"Subject": tags, "xmp:Title": text}, params=["-P", "-overwrite_original"])
+            et.set_tags(imagepath, tags={"Subject": tags, "xmp:Title": text}, params=["-P", "-ec", "-overwrite_original"])
         except exiftool.exceptions.ExifToolExecuteError as e:
             logger.warning('Error "%s " writing tags, Exiftool output was %s', e, et.last_stderr)
     elif tags:
@@ -334,21 +334,29 @@ def recognitionprocessor():
             logger.info("Processing image, job is %s", job)
             if job["op"] == "recognition":
                 if job["subdiv"] == "screenshot" and job['models'] is not None:
+                    logger.info("Processing screenshot, job is %s", job)
                     recognize_image(job["path"], screenshotcollection, job["subdiv"], job["is_screenshot"], job["models"], )
                 elif job['models'] is not None:
+                    logger.info("Processing image now, models are %s", job["models"])
                     recognize_image(job["path"], collection, job["subdiv"], job["is_screenshot"], job["models"], )
+                else: logger.warning("No models specified for image %s", job["path"])
+            else: logger.warning("Unknown job operation %s", job["op"])
         elif job["type"] == "video":
             if job["op"] == "recognition" and job['models'] is not None:
                 logger.info("Processing video, job is %s", job)
                 recognize_video(job["path"], videocollection, job["subdiv"], job["models"])
             # TODO: client.py:178
+        else:
+            logger.warning("Unknown job type %s", job["type"])
 
 
 def main():
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
-        executor.submit(exifprocessor)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
-        executor.submit(recognitionprocessor)
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
+    #     executor.submit(exifprocessor)
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=config.threads) as executor:
+    #     executor.submit(recognitionprocessor)
+    recognitionprocessor()
+    exifprocessor()
 
 
 if __name__ == '__main__':
